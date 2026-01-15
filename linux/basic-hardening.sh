@@ -1,11 +1,11 @@
 #!/bin/bash
-#Edit as necessary after copying to machine.
+# Edit as necessary after copying to machine.
 # List of target IP addresses
 HOSTS=("10.4.1.4/24, 10.4.1.11/24, 192.168.4.3/24")  # don't know all of the ips yet :(
-PORT="22" #obviously
+PORT="22"
 USERNAME="lockpick" # don't know which username goes to which password
-PASSWORD="L0ckD0wn4ever" # don't know yet
-NEW_PASSWORD="Il0veL1nux@ndhat3wind0ws!" #make one up
+PASSWORD="CCDC-Default-P@ssword"
+NEW_PASSWORD="UAUKNOW123#"
 
 # Loop through each IP address and execute the security updates
 for HOST in "${HOSTS[@]}"; do
@@ -13,9 +13,16 @@ for HOST in "${HOSTS[@]}"; do
 
     sshpass -p "$PASSWORD" ssh -p "$PORT" -o StrictHostKeyChecking=no "$USERNAME@$HOST" <<EOF
         echo "$PASSWORD" | sudo -S bash -c '
-            # Remove telnet and telnet-client
-            # echo "Removing telnet and telnet-client..."
-            # apt-get remove -y telnet telnetd >/dev/null 2>&1 || echo "Telnet not installed."
+            # Remove all unnecessary programs that may be installed
+            echo "Removing telnet and telnet-client..."
+            apt remove -y telnet telnetd >/dev/null 2>&1 || echo "Telnet not installed."
+            apt remove -y netcat >/dev/null 2>&1 || echo "Netcat not installed."
+
+            # Add necessary programs that we end up using
+            echo "Adding necessary packages..."
+            apt install -y rsync >/dev/null 2>&1 || echo "Rsync already installed."
+            apt install -y lynis >/dev/null 2>&1 || echo "Lynis already installed."
+            apt install -y git >/dev/null 2>&1 || echo "Git already installed."
 
             # Change passwords for all users with /bin/bash shell
             echo "Changing passwords for all users..."
@@ -61,9 +68,7 @@ EOF
     echo "Finished processing $HOST."
 done
 
-# remove netcat, comes preinstalled on newer versions of linux
 # "sudo pam-auth-update --force"
-# "apt remove telnetd"
 # bad systemd services, look for that
 # check open ports (netstat/ss -tulpn), then ufw/iptables -_-
 # "which netstat -nptwu"
