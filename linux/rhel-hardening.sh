@@ -2,10 +2,10 @@
 set -euo pipefail
 
 PORT=22
-USERNAME="lockpick"
-PASSWORD="CCDC-Default-P@ssword"
+USERNAME="smoking_gun"
+PASSWORD="CCDC-P@ssw0rd"
 NEW_PASSWORD="UAUKNOW123#"
-IGNORE_USER="default"
+IGNORE_USER="blackteam"
 
 HOSTS=(
   0.0.0.0
@@ -14,19 +14,16 @@ HOSTS=(
 harden_system() {
 set -euo pipefail
 
-NEW_PASSWORD="UAUKNOW123#"
-IGNORE_USER="default"
-
-echo "[*] Updating system..."
+echo "Updating system..."
 dnf -y update >/dev/null
 
-echo "[*] Installing EPEL..."
+echo "Installing EPEL..."
 dnf -y install epel-release >/dev/null
 
-echo "[*] Removing dangerous services..."
+echo "Removing dangerous services..."
 dnf -y remove telnet telnet-server nmap-ncat >/dev/null 2>&1 || true
 
-echo "[*] Installing security tools..."
+echo "Installing security tools..."
 dnf -y install \
   rsync \
   git \
@@ -36,28 +33,22 @@ dnf -y install \
   lynis \
   policycoreutils-python-utils >/dev/null
 
-# -----------------------------
-# linPEAS
-# -----------------------------
-echo "[*] Installing linPEAS..."
+# Configure linPEAS for the system
+echo "Installing linPEAS..."
 mkdir -p /opt/linpeas
 curl -fsSL https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh \
   -o /opt/linpeas/linpeas.sh
 chmod 700 /opt/linpeas/linpeas.sh
 
-# -----------------------------
-# Firewall: firewalld → iptables
-# -----------------------------
-echo "[*] Switching firewall to iptables..."
+# Switch from firewalld to iptables
+echo "Switching firewall to iptables..."
 systemctl disable --now firewalld 2>/dev/null || true
 systemctl mask firewalld 2>/dev/null || true
 systemctl enable --now iptables
 systemctl enable --now ip6tables
 
-# -----------------------------
-# SELinux Hardening
-# -----------------------------
-echo "[*] Hardening SELinux..."
+# SELinux configuration and hardening
+echo "Hardening SELinux..."
 
 # Enforce immediately
 setenforce 1 || true
@@ -66,7 +57,7 @@ setenforce 1 || true
 sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 sed -i 's/^SELINUXTYPE=.*/SELINUXTYPE=targeted/' /etc/selinux/config
 
-# Restore contexts (undo attacker tampering)
+# Restore contexts
 restorecon -RFv /etc /usr /bin /sbin /var >/dev/null 2>&1 || true
 
 # Harden common daemon behavior
@@ -76,10 +67,8 @@ setsebool -P daemons_dump_core off
 setsebool -P domain_kernel_load_modules off
 setsebool -P secure_mode_policyload on
 
-# -----------------------------
-# Fail2Ban
-# -----------------------------
-echo "[*] Configuring fail2ban..."
+# Set up Fail2Ban on the system
+echo "Configuring fail2ban..."
 cat >/etc/fail2ban/jail.local <<'JAIL'
 [sshd]
 enabled = true
@@ -92,10 +81,8 @@ JAIL
 
 systemctl enable --now fail2ban
 
-# -----------------------------
-# SSH Hardening (PASSWORD ONLY)
-# -----------------------------
-echo "[*] Hardening SSH..."
+# SSH hardening and configurations
+echo "Hardening SSH..."
 SSHD=/etc/ssh/sshd_config
 
 sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' $SSHD
@@ -107,10 +94,8 @@ sed -i 's/^#*MaxAuthTries.*/MaxAuthTries 3/' $SSHD
 
 systemctl restart sshd
 
-# -----------------------------
-# Password Rotation (WITH IGNORE)
-# -----------------------------
-echo "[*] Rotating passwords..."
+# Password rotation for all users barring the exception
+echo "Rotating passwords..."
 CURRENT_USER=$(logname 2>/dev/null || whoami)
 
 awk -F: '$3 >= 1000 {print $1}' /etc/passwd | while read -r user; do
@@ -122,40 +107,31 @@ awk -F: '$3 >= 1000 {print $1}' /etc/passwd | while read -r user; do
   echo "$user:$NEW_PASSWORD" | chpasswd
 done
 
-# -----------------------------
-# Cron Inspection
-# -----------------------------
-echo "[*] Checking crontabs..."
+# Quick inspection of the crontab
+echo "Checking crontabs..."
 for u in $(cut -d: -f1 /etc/passwd); do
   crontab -u "$u" -l >/dev/null 2>&1 && echo "  - Crontab exists for $u"
 done
 
-# -----------------------------
-# Backup /etc only
-# -----------------------------
-mkdir -p /root/backups
-rsync -a /etc /root/backups/etc-$(date +%F)
+# Backup important directories locally
+echo "Creating backup directory..."
+BACKUP_DIR="~/.mongosux/backups"
+mkdir -p "$BACKUP_DIR"
 
-# -----------------------------
-# Binary reconfiguration
-# -----------------------------
-if [ -x /usr/bin/sudo ]; then
-  install -o root -g root -m 4755 /usr/bin/sudo /usr/bin/spunk
-  rm -f /usr/bin/sudo
-fi
+echo "Backing up /etc..."
+rsync -avz /etc "$BACKUP_DIR/"
 
-if [ -x /usr/bin/cp ]; then
-  install -o root -g root -m 0755 /usr/bin/cp /bin/db
-  rm -f /usr/bin/cp
-fi
+echo "Backing up /bin..."
+rsync -avz /bin "$BACKUP_DIR/"
 
-echo "[+] Hardening complete."
+echo "Backing up /sbin..."
+rsync -avz /sbin "$BACKUP_DIR/"
+
+echo "Hardening complete."
 sestatus || true
 }
 
-# =============================
-# EXECUTION LOGIC
-# =============================
+# Main script logic
 run_local=false
 
 [ "${#HOSTS[@]}" -eq 0 ] && run_local=true
