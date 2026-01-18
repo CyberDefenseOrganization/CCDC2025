@@ -31,3 +31,7 @@ find / -type f \( -perm -4000 -o -perm -2000 \) 2>/dev/null | xargs ls -l
 
 echo "Searching for any obvious gimmies using dpkg"
 dpkg -l | grep -iE 'malicious|backdoor|suspicious|virus|evil|ev1l|bad'
+
+# Look for processes running in memory
+echo "Evaluating processes running in memory"
+ps aux | grep -E '(python[0-9]*\s|\.py\b|go-build)' | grep -v grep

@@ -82,30 +82,33 @@ crontab_persistence() {
     done | tee /tmp/crontabs.log
 }
 
-
-
-
+# Checking systemd services
 check_services() {
-services="/etc/systemd/system"
+    services="/etc/systemd/system"
 
-
-find -L "$services" -type f -name "*.service" | while read service; do
-    if [ -e "$service" ]; then
-        echo -e "\n"
-        echo "--------------------------------------------------------------------------------"
-        echo "checking service $service"
-        echo "--------------------------------------------------------------------------------"
-        echo -e "\n"
-        grep -E 'Description|ExecStart|ExecStartPre|User|Group' "$service"
-    else
-        echo "skipping service $service"
-    fi
-done
+    find -L "$services" -type f -name "*.service" | while read service; do
+        if [ -e "$service" ]; then
+            echo -e "\n"
+            echo "--------------------------------------------------------------------------------"
+            echo "checking service $service"
+            echo "--------------------------------------------------------------------------------"
+            echo -e "\n"
+            grep -E 'Description|ExecStart|ExecStartPre|User|Group' "$service"
+        else
+            echo "skipping service $service"
+        fi
+    done
 }
 
+# Check running processes
+check_processes() {
+    ps aux | grep -E '(python[0-9]*\s|\.py\b|go-build)' | grep -v grep
+}
 
-
-
+# Check open files
+check_files() {
+    lsof -i -n
+}
 
 
 # User Menu
@@ -121,6 +124,8 @@ case $opt in
     6) suid_binaries ;;
     7) check_services ;;
     8) crontab_persistence ;;
-    9) golang; kits; integrity_check; hidden_files; network_activity; suid_binaries; crontab_persistence; check_services ;;
+    9) check_processes ;;
+    10) check_files ;;
+    11) golang; kits; integrity_check; hidden_files; network_activity; suid_binaries; crontab_persistence; check_services; check_processes; check_files ;;
     *) kits; golang ;;
 esac
