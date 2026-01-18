@@ -1,4 +1,5 @@
 #!/bin/bash
+# Used as baseline for the OS specific hardening scripts
 # Edit as necessary after copying to machine.
 # List of target IP addresses
 HOSTS=("10.4.1.4/24, 10.4.1.11/24, 192.168.4.3/24")  # don't know all of the ips yet :(
