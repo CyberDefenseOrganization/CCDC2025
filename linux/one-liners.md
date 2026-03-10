@@ -85,3 +85,10 @@ sudo find /bin /sbin /usr/bin /usr/sbin -type f -mmin -5
 systemctl cat <service> | grep "ExecStart"
 systemctl status <service> | grep "ExecStart"
 ```
+
+
+**Check package manager for the installation location of important files**
+```
+dpkg -L <service>
+rpm -ql <service>
+```
