@@ -105,7 +105,7 @@ for file in "${files_to_backup[@]}"; do
     fi
 done
 
-git commit -m "auto bakup key files $(date '+%Y-%m-%d %H:%M:%S')"
+git commit -m "auto backup key files $(date '+%Y-%m-%d %H:%M:%S')"
 
 echo "--------------------------------------------------------------------------------"
 echo "Completed backup of key files"

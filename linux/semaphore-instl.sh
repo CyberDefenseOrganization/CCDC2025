@@ -1,14 +1,21 @@
 #!/bin/bash
 
+#############
+# HOW TO RUN
+# ./sempahore_install user password
+#############
+
+read -p "Username: " user
+read -s -p "Password: " password
+
 # 1. Check if Docker is installed via snap
-if ! snap list docker &> /dev/null; then
-    echo "Docker not found. Installing via snap..."
-    sudo snap install docker
-    sudo addgroup --system docker
-    sudo adduser $USER docker
-    echo "Docker installed."
-else
+if dpkg -l | grep -q docker.io; then
     echo "Docker is already installed."
+else
+    echo "Docker not found. Installing..."
+    sudo apt update
+    sudo apt install -y docker.io
+    echo "Docker installation complete."
 fi
 
 # 2. Check if Semaphore container is already running
@@ -23,14 +30,14 @@ else
     sudo docker run -d \
       --name semaphore \
       -p 3000:3000 \
-      -e SEMAPHORE_ADMIN=cdo \
-      -e SEMAPHORE_ADMIN_PASSWORD=bb123#123 \
+      -e SEMAPHORE_ADMIN=$user \
+      -e SEMAPHORE_ADMIN_PASSWORD=$password \
       -e SEMAPHORE_ADMIN_NAME="CDO Admin" \
       -e SEMAPHORE_ADMIN_EMAIL=admin@localhost \
       -e SEMAPHORE_DB_DIALECT=bolt \
       semaphoreui/semaphore:latest
     
     echo "Semaphore deployed! Access it at http://localhost:3000"
-    echo "Username: cdo"
-    echo "Password: bb123#123"
+    echo "Username: $user"
+    echo "Password: $password"
 fi
