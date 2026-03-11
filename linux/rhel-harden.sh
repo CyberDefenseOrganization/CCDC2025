@@ -1,18 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
-PORT=22
-USERNAME="smoking_gun"
-PASSWORD="CCDC-P@ssw0rd"
-NEW_PASSWORD="UAUKNOW123#"
-IGNORE_USER="blackteam"
+if [[ $EUID -ne 0 ]]; then
+  echo "Run with sudo permissions!"
+  exit 1
+fi
 
-HOSTS=(
-  0.0.0.0
-)
+read -s -p "Enter your new password: " new_password
+echo
 
-harden_system() {
-set -euo pipefail
+IGNORE_USERS=("blackteam" "black_team" "black-team")
 
 echo "Updating system..."
 dnf -y update --security || true
@@ -48,17 +45,13 @@ firewall-cmd --reload >/dev/null
 # SELinux configuration and hardening
 echo "Hardening SELinux..."
 
-# Enforce immediately
 setenforce 1 || true
 
-# Persist enforcement
 sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
 sed -i 's/^SELINUXTYPE=.*/SELINUXTYPE=targeted/' /etc/selinux/config
 
-# Restore contexts
 restorecon -Rv /etc/ssh /etc/passwd /etc/shadow /usr/bin /bin /sbin >/dev/null 2>&1 || true
 
-# Harden common daemon behavior
 setsebool -P ssh_sysadm_login off || true
 setsebool -P daemons_enable_cluster_mode off || true
 setsebool -P daemons_dump_core off || true
@@ -85,35 +78,45 @@ SSHD=/etc/ssh/sshd_config
 
 sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' "$SSHD"
 sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' "$SSHD"
-sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication no/' "$SSHD"
-sed -i 's/^#*AuthorizedKeysFile.*/AuthorizedKeysFile none/' "$SSHD"
 sed -i 's/^#*X11Forwarding.*/X11Forwarding no/' "$SSHD"
 sed -i 's/^#*MaxAuthTries.*/MaxAuthTries 3/' "$SSHD"
 
 sshd -t && systemctl restart sshd
 
-# Password rotation for all users barring the exception
+# Password rotation
 echo "Rotating passwords..."
 CURRENT_USER=$(logname 2>/dev/null || whoami)
 
-awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}' /etc/passwd | while read -r user; do
-  if [[ "$user" == "root" ]] || \
-     [[ "$user" == "$CURRENT_USER" ]] || \
-     [[ "$user" == "$IGNORE_USER" ]]; then
+awk -F: '$3 >= 1000 && $7 !~ /(nologin|false)/ {print $1}' /etc/passwd | while read -r user; do
+
+  skip=false
+  for ignore in "${IGNORE_USERS[@]}"; do
+    if [[ "$user" == "$ignore" ]]; then
+      skip=true
+      break
+    fi
+  done
+
+  if [[ "$user" == "root" ]] || [[ "$user" == "$CURRENT_USER" ]] || [[ "$skip" == true ]]; then
     continue
   fi
-  echo "$user:$NEW_PASSWORD" | chpasswd
+
+  echo "$user:$new_password" | chpasswd
 done
 
-# Quick inspection of the crontab
+# Quick inspection of crontabs
 echo "Checking crontabs..."
-for u in $(cut -d: -f1 /etc/passwd); do
+cut -d: -f1 /etc/passwd | while read -r u; do
   crontab -u "$u" -l >/dev/null 2>&1 && echo "  - Crontab exists for $u"
 done
 
-# Backup important directories locally
+# Determine invoking user's home directory
+INVOKING_USER=${SUDO_USER:-root}
+INVOKING_HOME=$(eval echo "~$INVOKING_USER")
+
+# Backup important directories
 echo "Creating backup directory..."
-BACKUP_DIR="$HOME/.mongosux/backups"
+BACKUP_DIR="$INVOKING_HOME/.mongosux/backups"
 mkdir -p "$BACKUP_DIR"
 
 echo "Backing up /etc..."
@@ -127,27 +130,3 @@ rsync -a /sbin "$BACKUP_DIR/"
 
 echo "Hardening complete."
 sestatus || true
-}
-
-# Main script logic
-run_local=false
-
-[ "${#HOSTS[@]}" -eq 0 ] && run_local=true
-for h in "${HOSTS[@]}"; do
-  [ "$h" == "0.0.0.0" ] && run_local=true
-done
-
-if $run_local; then
-  [ "$(id -u)" -ne 0 ] && echo "Must be root" && exit 1
-  harden_system
-  exit 0
-fi
-
-for HOST in "${HOSTS[@]}"; do
-  sshpass -p "$PASSWORD" ssh -tt -o StrictHostKeyChecking=no -p "$PORT" "$USERNAME@$HOST" <<EOF
-echo "$PASSWORD" | sudo -S bash <<'ROOT_EOF'
-$(declare -f harden_system)
-harden_system
-ROOT_EOF
-EOF
-done
