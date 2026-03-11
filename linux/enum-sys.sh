@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Re-run with sudo if not root
+if [[ $EUID -ne 0 ]]; then
+  echo "Elevating privileges with sudo..."
+  exec sudo "$0" "$@"
+fi
+
 OUTPUT_DIR="/opt/enum"
 SYS_FILE="$OUTPUT_DIR/sys-stats.txt"
 NET_FILE="$OUTPUT_DIR/net-info.txt"
