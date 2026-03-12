@@ -9,8 +9,6 @@ fi
 read -s -p "Enter your new password: " new_password
 echo
 
-IGNORE_USERS=("blackteam" "black_team" "black-team")
-
 echo "Updating system..."
 dnf -y update --security || true
 
@@ -84,25 +82,15 @@ sed -i 's/^#*MaxAuthTries.*/MaxAuthTries 3/' "$SSHD"
 sshd -t && systemctl restart sshd
 
 # Password rotation
-echo "Rotating passwords..."
-CURRENT_USER=$(logname 2>/dev/null || whoami)
+CURRENT_USER=${SUDO_USER:-$(whoami)}
 
-awk -F: '$3 >= 1000 && $7 !~ /(nologin|false)/ {print $1}' /etc/passwd | while read -r user; do
+echo "Updating root password..."
+echo "root:$new_password" | chpasswd
 
-  skip=false
-  for ignore in "${IGNORE_USERS[@]}"; do
-    if [[ "$user" == "$ignore" ]]; then
-      skip=true
-      break
-    fi
-  done
-
-  if [[ "$user" == "root" ]] || [[ "$user" == "$CURRENT_USER" ]] || [[ "$skip" == true ]]; then
-    continue
-  fi
-
-  echo "$user:$new_password" | chpasswd
-done
+if [[ "$CURRENT_USER" != "root" ]]; then
+  echo "Updating password for $CURRENT_USER..."
+  echo "$CURRENT_USER:$new_password" | chpasswd
+fi
 
 # Quick inspection of crontabs
 echo "Checking crontabs..."
@@ -123,10 +111,13 @@ echo "Backing up /etc..."
 rsync -a /etc "$BACKUP_DIR/"
 
 echo "Backing up /bin..."
-rsync -a /bin "$BACKUP_DIR/"
+rsync -a /usr/bin "$BACKUP_DIR/"
 
-echo "Backing up /sbin..."
-rsync -a /sbin "$BACKUP_DIR/"
+unset new_password
+
+# Quick check for linux persistence
+echo "Listing SUID binaries..."
+find / -perm -4000 -type f 2>/dev/null > "$BACKUP_DIR/suid-binaries.txt"
 
 echo "Hardening complete."
 sestatus || true
