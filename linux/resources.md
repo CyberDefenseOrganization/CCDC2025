@@ -25,3 +25,7 @@ https://github.com/ansible-lockdown/UBUNTU24-CIS
 ### Firewall Resources
 
 https://github.com/olivierb46/PyFRC2G
+
+*Shhhhhhhh...*
+
+https://github.com/carterleehaney/AllPortsTours/tree/main
