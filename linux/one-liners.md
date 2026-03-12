@@ -92,3 +92,11 @@ systemctl status <service> | grep "ExecStart"
 dpkg -L <service>
 rpm -ql <service>
 ```
+
+
+**Check for modified binaries on RHEL systems**
+```
+find /usr/bin /usr/sbin /bin /sbin -type f | while read f; do
+    rpm -qf "$f" >/dev/null 2>&1 || echo "Unowned binary: $f"
+done
+```
