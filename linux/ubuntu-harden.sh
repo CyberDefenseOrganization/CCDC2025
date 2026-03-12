@@ -9,14 +9,24 @@ fi
 read -s -p "Enter your new password: " new_password
 echo
 
+read -p "Enter subnet to whitelist for fail2ban (format X.X.X.X/X) or press Enter to skip: " whitelist_subnet
+
+WHITELIST_IPS="127.0.0.1/8 ::1"
+
+if [[ $whitelist_subnet =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+  WHITELIST_IPS="$WHITELIST_IPS $whitelist_subnet"
+else
+  echo "Invalid or empty subnet. Only localhost will be whitelisted."
+fi
+
 echo "Updating system..."
-apt update >/dev/null
+apt-get update >/dev/null
 
 echo "Removing services..."
-apt remove -y telnet telnetd netcat netcat-openbsd netcat-traditional >/dev/null 2>&1 || true
+apt-get remove -y telnet telnetd netcat netcat-openbsd netcat-traditional >/dev/null 2>&1 || true
 
 echo "Installing security tools..."
-apt install -y \
+apt-get install -y \
   rsync \
   git \
   curl \
@@ -32,8 +42,11 @@ curl -fsSL https://github.com/carlospolop/PEASS-ng/releases/latest/download/linp
   -o /opt/linpeas/linpeas.sh
 chmod 700 /opt/linpeas/linpeas.sh
 
-# Configure Fail2Ban for the system
+# Configure Fail2Ban
 echo "Configuring fail2ban..."
+
+mkdir -p /etc/fail2ban/jail.d
+
 cat >/etc/fail2ban/jail.local <<'JAIL'
 [sshd]
 enabled = true
@@ -43,6 +56,12 @@ maxretry = 5
 findtime = 10m
 bantime = 1h
 JAIL
+
+cat >/etc/fail2ban/jail.d/whitelist.conf <<'WHITELIST'
+[DEFAULT]
+
+ignoreip = $WHITELIST_IPS
+WHITELIST
 
 systemctl enable --now fail2ban
 
@@ -57,7 +76,7 @@ sed -i 's/^#*MaxAuthTries.*/MaxAuthTries 3/' "$SSHD"
 
 sshd -t && systemctl restart ssh
 
-# Rotate all passwords except ignored users
+# Rotate passwords
 CURRENT_USER=${SUDO_USER:-$(whoami)}
 
 echo "Updating root password..."
@@ -74,25 +93,22 @@ cut -d: -f1 /etc/passwd | while read -r u; do
   crontab -u "$u" -l >/dev/null 2>&1 && echo "  - Crontab exists for $u"
 done
 
-# Determine invoking user's home directory
-INVOKING_USER=${SUDO_USER:-root}
-INVOKING_HOME=$(eval echo "~$INVOKING_USER")
-
 # Backup important directories
 echo "Creating backup directory..."
-BACKUP_DIR="$INVOKING_HOME/.mongosux/backups"
+BACKUP_DIR="/opt/.mongosux/backups"
 mkdir -p "$BACKUP_DIR"
 
 echo "Backing up /etc..."
 rsync -a /etc "$BACKUP_DIR/"
 
-echo "Backing up /bin..."
+echo "Backing up /usr/bin..."
 rsync -a /usr/bin "$BACKUP_DIR/"
 
-unset new_password
-
-# Quick check for linux persistence
+# Quick persistence check
 echo "Listing SUID binaries..."
 find / -perm -4000 -type f 2>/dev/null > "$BACKUP_DIR/suid-binaries.txt"
 
+unset new_password
+
+echo "Backups stored in: $BACKUP_DIR"
 echo "Hardening complete."

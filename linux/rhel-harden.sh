@@ -9,6 +9,16 @@ fi
 read -s -p "Enter your new password: " new_password
 echo
 
+read -p "Enter subnet to whitelist (format X.X.X.X/X) or press Enter to skip: " whitelist_subnet
+
+WHITELIST_IPS="127.0.0.1/8 ::1"
+
+if [[ $whitelist_subnet =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+  WHITELIST_IPS="$WHITELIST_IPS $whitelist_subnet"
+else
+  echo "Invalid or empty subnet. Only localhost will be whitelisted."
+fi
+
 echo "Updating system..."
 dnf -y update --security || true
 
@@ -34,8 +44,8 @@ curl -fsSL https://github.com/carlospolop/PEASS-ng/releases/latest/download/linp
   -o /opt/linpeas/linpeas.sh
 chmod 700 /opt/linpeas/linpeas.sh
 
-# Switch from firewalld to iptables
-echo "Switching firewall to iptables..."
+# Firewall configuration
+echo "Configuring firewall..."
 systemctl enable --now firewalld
 firewall-cmd --permanent --add-service=ssh >/dev/null
 firewall-cmd --reload >/dev/null
@@ -56,8 +66,11 @@ setsebool -P daemons_dump_core off || true
 setsebool -P domain_kernel_load_modules off || true
 setsebool -P secure_mode_policyload on || true
 
-# Set up Fail2Ban on the system
+# Set up Fail2Ban
 echo "Configuring fail2ban..."
+
+mkdir -p /etc/fail2ban/jail.d
+
 cat >/etc/fail2ban/jail.local <<'JAIL'
 [sshd]
 enabled = true
@@ -68,9 +81,15 @@ findtime = 10m
 bantime = 1h
 JAIL
 
+cat >/etc/fail2ban/jail.d/whitelist.conf <<'WHITELIST'
+[DEFAULT]
+
+ignoreip = $WHITELIST_IPS
+WHITELIST
+
 systemctl enable --now fail2ban
 
-# SSH hardening and configurations
+# SSH hardening
 echo "Hardening SSH..."
 SSHD=/etc/ssh/sshd_config
 
@@ -98,19 +117,15 @@ cut -d: -f1 /etc/passwd | while read -r u; do
   crontab -u "$u" -l >/dev/null 2>&1 && echo "  - Crontab exists for $u"
 done
 
-# Determine invoking user's home directory
-INVOKING_USER=${SUDO_USER:-root}
-INVOKING_HOME=$(eval echo "~$INVOKING_USER")
-
 # Backup important directories
 echo "Creating backup directory..."
-BACKUP_DIR="$INVOKING_HOME/.mongosux/backups"
+BACKUP_DIR="/opt/.mongosux/backups"
 mkdir -p "$BACKUP_DIR"
 
 echo "Backing up /etc..."
 rsync -a /etc "$BACKUP_DIR/"
 
-echo "Backing up /bin..."
+echo "Backing up /usr/bin..."
 rsync -a /usr/bin "$BACKUP_DIR/"
 
 unset new_password
