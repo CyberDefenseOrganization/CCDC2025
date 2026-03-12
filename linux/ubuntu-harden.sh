@@ -57,7 +57,7 @@ findtime = 10m
 bantime = 1h
 JAIL
 
-cat >/etc/fail2ban/jail.d/whitelist.conf <<'WHITELIST'
+cat >/etc/fail2ban/jail.d/whitelist.conf <<WHITELIST
 [DEFAULT]
 
 ignoreip = $WHITELIST_IPS
