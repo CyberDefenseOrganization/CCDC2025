@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run with sudo permissions!"
@@ -9,24 +8,8 @@ fi
 read -sp "Enter your new password: " new_password
 echo
 
-read -p "Enter subnet to whitelist for fail2ban (format X.X.X.X/X) or press Enter to skip: " whitelist_subnet
-
-WHITELIST_IPS="127.0.0.1/8 ::1"
-
-if [[ $whitelist_subnet =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
-  WHITELIST_IPS="$WHITELIST_IPS $whitelist_subnet"
-else
-  echo "Invalid or empty subnet. Only localhost will be whitelisted."
-fi
-
-echo "Updating system..."
-apt-get -qq update >/dev/null
-
-echo "Removing services..."
-apt-get remove -y telnet telnetd netcat netcat-openbsd netcat-traditional >/dev/null 2>&1 || true
-
 echo "Installing packages..."
-apt-get install -y \
+zypper -n install -y \
   tcpdump \
   rsync \
   git \
@@ -34,7 +17,6 @@ apt-get install -y \
   net-tools \
   traceroute \
   lsof \
-  debsums \
   unhide \
   fail2ban \
   ca-certificates \
@@ -46,29 +28,6 @@ mkdir -p /opt/linpeas
 curl -fsSL https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh \
   -o /opt/linpeas/linpeas.sh
 chmod 700 /opt/linpeas/linpeas.sh
-
-# Configure Fail2Ban
-echo "Configuring fail2ban..."
-
-mkdir -p /etc/fail2ban/jail.d
-
-cat >/etc/fail2ban/jail.local <<'JAIL'
-[sshd]
-enabled = true
-backend = systemd
-port = ssh
-maxretry = 5
-findtime = 10m
-bantime = 1h
-JAIL
-
-cat >/etc/fail2ban/jail.d/whitelist.conf <<WHITELIST
-[DEFAULT]
-
-ignoreip = $WHITELIST_IPS
-WHITELIST
-
-systemctl enable --now fail2ban
 
 # Hardening SSH
 echo "Hardening SSH..."

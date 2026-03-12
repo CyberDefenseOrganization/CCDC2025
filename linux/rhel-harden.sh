@@ -6,7 +6,12 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-read -s -p "Enter your new password: " new_password
+if [ -f /etc/selinux/config ]; then
+    sed -i 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
+    setenforce 0 2>/dev/null
+fi
+
+read -sp "Enter your new password: " new_password
 echo
 
 read -p "Enter subnet to whitelist (format X.X.X.X/X) or press Enter to skip: " whitelist_subnet
@@ -20,19 +25,27 @@ else
 fi
 
 echo "Updating system..."
-dnf -y update --security || true
+dnf -y update --security
 
 echo "Installing EPEL..."
-dnf -y install epel-release >/dev/null || true
+dnf -y install epel-release 2>/dev/null
 
 echo "Removing dangerous services..."
-dnf -y remove telnet telnet-server nmap-ncat >/dev/null 2>&1 || true
+dnf -y remove telnet telnet-server nmap-ncat >/dev/null 2>&1
 
-echo "Installing security tools..."
+echo "Installing packages..."
 dnf -y install \
   rsync \
   git \
   curl \
+  wget \
+  net-tools \
+  tcpdump \
+  traceroute \
+  iptables \
+  lsof \
+  unhide \
+  ca-certificates \
   fail2ban \
   lynis \
   policycoreutils-python-utils >/dev/null
@@ -49,22 +62,6 @@ echo "Configuring firewall..."
 systemctl enable --now firewalld
 firewall-cmd --permanent --add-service=ssh >/dev/null
 firewall-cmd --reload >/dev/null
-
-# SELinux configuration and hardening
-echo "Hardening SELinux..."
-
-setenforce 1 || true
-
-sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
-sed -i 's/^SELINUXTYPE=.*/SELINUXTYPE=targeted/' /etc/selinux/config
-
-restorecon -Rv /etc/ssh /etc/passwd /etc/shadow /usr/bin /bin /sbin >/dev/null 2>&1 || true
-
-setsebool -P ssh_sysadm_login off || true
-setsebool -P daemons_enable_cluster_mode off || true
-setsebool -P daemons_dump_core off || true
-setsebool -P domain_kernel_load_modules off || true
-setsebool -P secure_mode_policyload on || true
 
 # Set up Fail2Ban
 echo "Configuring fail2ban..."
@@ -135,4 +132,3 @@ echo "Listing SUID binaries..."
 find / -perm -4000 -type f 2>/dev/null > "$BACKUP_DIR/suid-binaries.txt"
 
 echo "Hardening complete."
-sestatus || true
